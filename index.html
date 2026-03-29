@@ -4,7 +4,38 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title id="page-title">Road Trip</title>
-<script src="data.js"></script>
+<script>
+// ════════════════════════════════════════════════════════════════
+//  GOOGLE SHEETS CONFIGURATION
+//  ➊  Paste your Google Sheet ID below (the long string in the URL)
+//  ➋  That's it — no other changes needed
+//
+//  How to find your Sheet ID:
+//  https://docs.google.com/spreadsheets/d/ ➜ SHEET_ID ➜ /edit
+//
+//  The sheet must be published:
+//  File → Share → Publish to web → pick each tab → CSV → Publish
+// ════════════════════════════════════════════════════════════════
+const SHEET_ID = 'YOUR_SHEET_ID_HERE';
+
+// Tab / GID numbers — update these if you reorder tabs in the sheet
+// Find GID: click the tab → look at the URL: ...#gid=XXXXXXXX
+const TABS = {
+  info:         0,       // tab 1: trip info
+  participants: 759210,  // tab 2: participants
+  days:         1073083, // tab 3: days
+  events:       447341,  // tab 4: events
+  who:          213956,  // tab 5: who attends which events
+};
+
+// Fallback TRIP data shown while loading (or if the sheet is not yet set up)
+const TRIP = {
+  name:'Family Trip', name_zh:'家庭旅行',
+  dates:'', dates_zh:'', tagline:'', tagline_zh:'',
+  password:'xian2025',
+  participants:[], days:[]
+};
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&family=Noto+Sans+SC:wght@300;400;500&display=swap" rel="stylesheet">
 <style>
   :root {
@@ -236,10 +267,129 @@
   .tick { color:var(--jade2); font-weight:700; }
   .dash { color:#d8c0b0; }
 
+  /* ── ADMIN PANEL ── */
+  .admin-section { margin-bottom:48px; }
+  .admin-section-title {
+    font-family:'Noto Serif SC',serif; font-size:18px; margin-bottom:4px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .admin-section-title span { font-size:20px; }
+  .admin-section-sub { color:var(--muted); font-size:12px; margin-bottom:20px; }
+
+  .admin-field-group {
+    background:var(--surface); border:1px solid var(--border); border-radius:6px;
+    padding:20px 22px; margin-bottom:12px;
+  }
+  .admin-field-group.dragging { opacity:0.5; }
+  .admin-field-row { display:flex; gap:16px; flex-wrap:wrap; margin-bottom:14px; }
+  .admin-field-row:last-child { margin-bottom:0; }
+  .admin-field { display:flex; flex-direction:column; gap:5px; flex:1; min-width:160px; }
+  .admin-field label {
+    font-size:10px; letter-spacing:2px; text-transform:uppercase;
+    color:var(--muted); font-weight:500;
+  }
+  .admin-field label .zh-badge {
+    display:inline-block; font-size:9px; letter-spacing:0; text-transform:none;
+    background:var(--pink3); color:var(--red); padding:1px 5px; border-radius:3px;
+    margin-left:4px; font-weight:400;
+  }
+  .admin-input, .admin-textarea, .admin-select {
+    background:var(--bg); border:1px solid var(--border); border-radius:4px;
+    color:var(--ink); font-family:'Noto Sans SC',sans-serif; font-size:13px;
+    padding:8px 10px; outline:none; width:100%;
+    transition:border-color 0.2s;
+  }
+  .admin-input:focus, .admin-textarea:focus, .admin-select:focus { border-color:var(--pink); }
+  .admin-input::placeholder, .admin-textarea::placeholder { color:#d0b8a8; }
+  .admin-textarea { resize:vertical; min-height:60px; line-height:1.5; }
+  .admin-select { cursor:pointer; }
+  .admin-select option { background:#fffaf4; }
+
+  .admin-group-header {
+    display:flex; align-items:center; gap:10px; margin-bottom:16px;
+    padding-bottom:12px; border-bottom:1px solid var(--border);
+  }
+  .admin-group-num {
+    font-family:'Noto Serif SC',serif; font-size:28px; color:#e8d0c0; font-weight:700;
+    line-height:1; flex-shrink:0;
+  }
+  .admin-group-label { flex:1; }
+  .admin-group-label strong { font-size:14px; display:block; }
+  .admin-group-label span   { font-size:12px; color:var(--muted); }
+  .admin-del-btn {
+    background:none; border:1px solid var(--border); border-radius:4px;
+    color:var(--muted); cursor:pointer; font-size:12px; padding:5px 12px;
+    font-family:'Noto Sans SC',sans-serif; transition:all 0.2s; flex-shrink:0;
+  }
+  .admin-del-btn:hover { border-color:var(--red); color:var(--red); }
+
+  /* event sub-card inside day */
+  .admin-event { background:var(--surface2); border:1px solid var(--border); border-radius:4px; padding:14px 16px; margin-bottom:8px; position:relative; }
+  .admin-event::before {
+    content:''; position:absolute; left:0; top:0; bottom:0; width:3px; border-radius:4px 0 0 4px;
+  }
+  .admin-event[data-type="drive"]::before    { background:var(--jade); }
+  .admin-event[data-type="stay"]::before     { background:var(--gold2); }
+  .admin-event[data-type="activity"]::before { background:var(--red); }
+  .admin-event[data-type="food"]::before     { background:var(--pink); }
+  .admin-event[data-type="free"]::before     { background:#c8a890; }
+
+  .admin-event-top { display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }
+  .admin-who-grid { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+  .admin-who-btn {
+    font-size:11px; padding:4px 12px; border-radius:20px;
+    border:1px solid var(--border); background:none; color:var(--muted);
+    cursor:pointer; font-family:'Noto Sans SC',sans-serif; transition:all 0.15s;
+  }
+  .admin-who-btn.on { background:var(--pink3); border-color:var(--pink); color:var(--red); }
+  .admin-who-label { font-size:10px; letter-spacing:2px; text-transform:uppercase; color:var(--muted); margin-top:10px; margin-bottom:6px; }
+
+  .admin-add-ev {
+    display:flex; align-items:center; gap:6px; justify-content:center;
+    background:none; border:1px dashed var(--border); color:var(--muted);
+    font-family:'Noto Sans SC',sans-serif; font-size:11px; letter-spacing:2px;
+    text-transform:uppercase; padding:10px; border-radius:4px;
+    cursor:pointer; width:100%; margin-top:4px; transition:all 0.2s;
+  }
+  .admin-add-ev:hover { border-color:var(--pink); color:var(--red); }
+
+  .admin-add-block {
+    display:flex; align-items:center; gap:8px;
+    background:none; border:1px dashed var(--border); color:var(--muted);
+    font-family:'Noto Sans SC',sans-serif; font-size:12px; letter-spacing:2px;
+    text-transform:uppercase; padding:14px 20px; border-radius:6px;
+    cursor:pointer; width:100%; margin-top:4px; transition:all 0.2s;
+  }
+  .admin-add-block:hover { border-color:var(--gold2); color:var(--gold); }
+
+  /* participants grid in admin */
+  .admin-p-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; margin-bottom:16px; }
+
+  /* day attendance checkboxes inside participant card */
+  .admin-day-checks { display:flex; gap:6px; flex-wrap:wrap; margin-top:8px; }
+
+  /* ── DOWNLOAD BUTTON ── */
+  .download-bar {
+    position:sticky; bottom:0; z-index:50;
+    background:linear-gradient(to top, var(--bg) 70%, transparent);
+    padding:20px 0 16px; display:flex; justify-content:center; gap:12px;
+  }
+  .btn-download {
+    display:inline-flex; align-items:center; gap:10px;
+    background:var(--ink); color:var(--cream,#f5e8c8);
+    border:none; border-radius:6px; cursor:pointer;
+    font-family:'Noto Serif SC',serif; font-size:15px; font-weight:700;
+    padding:14px 32px; transition:background 0.2s; box-shadow:0 4px 20px rgba(46,31,14,0.18);
+  }
+  .btn-download:hover { background:#1a0e04; }
+  .btn-download .dl-icon { font-size:18px; }
+  .btn-download-hint { font-size:11px; color:var(--muted); text-align:center; margin-top:6px; }
+
   @media(max-width:640px){
-    .hero{padding:0 20px 36px;} .section{padding:32px 16px 60px;}
+    .hero{padding:0 20px 16px;} .section{padding:32px 16px 60px;}
     nav button{padding:14px 16px;font-size:10px;}
     .top-controls{flex-wrap:wrap;gap:6px;}
+    .admin-field-row{flex-direction:column;}
   }
 </style>
 </head>
@@ -258,6 +408,12 @@
       <button class="btn-confirm" onclick="confirmPw()"  data-i="modal.enter">Enter</button>
     </div>
   </div>
+</div>
+
+<!-- LOADING OVERLAY -->
+<div id="loading-overlay" style="display:flex;position:fixed;inset:0;z-index:9999;background:rgba(253,246,238,0.92);align-items:center;justify-content:center;flex-direction:column;gap:14px">
+  <div style="font-size:28px">🌸</div>
+  <div id="loading-msg" style="font-family:'Noto Sans SC',sans-serif;font-size:14px;color:#9a7a5a;letter-spacing:1px">Loading trip data…</div>
 </div>
 
 <!-- HERO -->
@@ -378,38 +534,40 @@
 <!-- ORG BAR -->
 <div class="org-bar">
   <strong data-i="orgbar.title">🔑 Organizer mode</strong>
-  <span style="color:var(--muted);font-weight:400" data-i="orgbar.hint">Edit freely — remember to save changes to data.js when done</span>
-  <button class="exit-btn" onclick="exitOrg()" data-i="orgbar.exit">Exit organizer mode</button>
+  <span style="color:var(--muted);font-weight:400" data-i="orgbar.hint">Changes here are temporary — to save permanently, edit the Google Sheet</span>
+  <a id="sheet-link" href="#" target="_blank" style="background:var(--jade);border:none;color:#fff;font-family:'Noto Sans SC',sans-serif;font-size:11px;letter-spacing:1px;padding:5px 16px;border-radius:20px;cursor:pointer;font-weight:600;flex-shrink:0;text-decoration:none;display:inline-flex;align-items:center;gap:5px">📊 Open Sheet</a>
+  <button class="exit-btn" onclick="exitOrg()" data-i="orgbar.exit">Exit</button>
 </div>
 
 <!-- NAV -->
 <nav>
-  <button  class="active"             id="tab-i"  onclick="showTab('itinerary',this)"    data-i="nav.itinerary">Itinerary</button>
-  <button  id="tab-p"  onclick="showTab('participants',this)" data-i="nav.participants">Participants</button>
+  <button               id="tab-p"  onclick="showTab('participants',this)" data-i="nav.participants">Participants</button>
+  <button class="active" id="tab-i"  onclick="showTab('itinerary',this)"    data-i="nav.itinerary">Itinerary</button>
   <button               id="tab-s"  onclick="showTab('schedule',this)"     data-i="nav.schedule">My Schedule</button>
   <button class="org-only" id="tab-ov" onclick="showTab('overview',this)"  data-i="nav.overview">Overview</button>
 </nav>
 
 <!-- PARTICIPANTS -->
-<div id="participants" class="section active">
+<div id="participants" class="section">
   <div class="section-header">
     <h2 id="p-heading" data-i="p.heading">The Crew</h2>
     <p  id="p-sub"     data-i="p.sub">Everyone joining the trip.</p>
   </div>
   <div id="p-read"></div>
-  <div id="p-edit" style="display:none"></div>
+  <div id="p-edit" style="display:none">
+    <div id="admin-participants"></div>
+  </div>
 </div>
 
 <!-- ITINERARY -->
-<div id="itinerary" class="section">
+<div id="itinerary" class="section active">
   <div class="section-header">
     <h2 data-i="it.heading">Itinerary</h2>
     <p id="it-sub" data-i="it.sub">The full day-by-day programme.</p>
   </div>
   <div id="it-read"></div>
   <div id="it-edit" style="display:none">
-    <div id="it-edit-days"></div>
-    <button class="btn-add-day" onclick="addDay()" data-i="btn.addDay">＋ Add Day</button>
+    <div id="admin-itinerary"></div>
   </div>
 </div>
 
@@ -434,7 +592,7 @@
 
 <script>
 // ════════════════════════════════════════
-//  UI STRINGS  (both languages)
+//  UI STRINGS
 // ════════════════════════════════════════
 const UI = {
   en: {
@@ -448,7 +606,7 @@ const UI = {
     'modal.enter':       'Enter',
     'modal.wrong':       'Incorrect password.',
     'orgbar.title':      '🔑 Organizer mode',
-    'orgbar.hint':       'Edit freely — remember to save changes to data.js when done',
+    'orgbar.hint':       'Changes here are temporary — edit the Google Sheet to save permanently',
     'orgbar.exit':       'Exit organizer mode',
     'nav.participants':  'Participants',
     'nav.itinerary':     'Itinerary',
@@ -507,7 +665,7 @@ const UI = {
     'modal.enter':       '确认',
     'modal.wrong':       '密码错误，请重试。',
     'orgbar.title':      '🔑 组织者模式',
-    'orgbar.hint':       '自由编辑——完成后请保存更改至 data.js',
+    'orgbar.hint':       '此处更改仅为临时——请编辑 Google 表格以永久保存',
     'orgbar.exit':       '退出组织者模式',
     'nav.participants':  '参与者',
     'nav.itinerary':     '行程安排',
@@ -562,10 +720,9 @@ const UI = {
 // ════════════════════════════════════════
 let lang = 'en';
 let isOrg = false;
-let pC = TRIP.participants.length;
-let dC = TRIP.days.length;
+let pC = 0;
+let dC = 0;
 let eC = 0;
-TRIP.days.forEach(d => d.events.forEach(e => { const n=parseInt(e.id.replace(/\D/g,'')); if(n>eC)eC=n; }));
 const EMOJIS = ['🌸','🚗','⛰️','🎒','📸','🌺','🏮','🍜','☕','🎨','📚','🎯','⛺','🗺️','🦅','🌿','🎸','🌊','🐉','🦋'];
 
 // ════════════════════════════════════════
@@ -573,10 +730,8 @@ const EMOJIS = ['🌸','🚗','⛰️','🎒','📸','🌺','🏮','🍜','☕',
 // ════════════════════════════════════════
 const $ = id => document.getElementById(id);
 const t  = key => UI[lang][key] || UI.en[key] || key;
-// pick localised field: e.g. f(day,'theme') → day.theme_zh or day.theme
 const f  = (obj, key) => (lang==='zh' && obj[key+'_zh']) ? obj[key+'_zh'] : obj[key] || '';
 
-// Apply UI strings to all [data-i] elements
 function applyI18n(){
   document.querySelectorAll('[data-i]').forEach(el => {
     const key = el.getAttribute('data-i');
@@ -584,9 +739,154 @@ function applyI18n(){
     if(el.tagName==='INPUT') el.placeholder = val;
     else el.textContent = val;
   });
-  // special: organizer badge text handled separately
   if(!isOrg) $('badge-o').textContent = t('badge.organizer');
   else        $('badge-o').textContent = t('badge.orgActive');
+}
+
+// ════════════════════════════════════════
+//  GOOGLE SHEETS FETCHER
+// ════════════════════════════════════════
+function csvUrl(gid){
+  return `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${gid}`;
+}
+
+function parseCSV(text){
+  // Handles quoted fields, commas inside quotes, newlines
+  const rows = [];
+  let row = [], field = '', inQ = false;
+  for(let i = 0; i < text.length; i++){
+    const c = text[i];
+    if(inQ){
+      if(c==='"' && text[i+1]==='"'){ field+='"'; i++; }
+      else if(c==='"'){ inQ=false; }
+      else { field+=c; }
+    } else {
+      if(c==='"'){ inQ=true; }
+      else if(c===','){ row.push(field.trim()); field=''; }
+      else if(c==='\n'||c==='\r'){
+        if(c==='\r'&&text[i+1]==='\n') i++;
+        row.push(field.trim()); field='';
+        if(row.some(x=>x!=='')) rows.push(row);
+        row=[];
+      } else { field+=c; }
+    }
+  }
+  if(field||row.length){ row.push(field.trim()); if(row.some(x=>x!=='')) rows.push(row); }
+  return rows;
+}
+
+function rowsToObjects(rows){
+  if(rows.length < 2) return [];
+  const headers = rows[0].map(h => h.toLowerCase().replace(/\s+/g,'_'));
+  return rows.slice(1).map(row => {
+    const obj = {};
+    headers.forEach((h, i) => { obj[h] = row[i] || ''; });
+    return obj;
+  });
+}
+
+async function fetchTab(gid){
+  const res = await fetch(csvUrl(gid));
+  if(!res.ok) throw new Error(`Failed to fetch tab gid=${gid}: ${res.status}`);
+  return rowsToObjects(parseCSV(await res.text()));
+}
+
+function showLoading(msg){ $('loading-overlay').style.display='flex'; $('loading-msg').textContent=msg||'Loading…'; }
+function hideLoading(){ $('loading-overlay').style.display='none'; }
+function showError(msg){ hideLoading(); $('loading-overlay').style.display='flex'; $('loading-msg').innerHTML=`<span style="color:var(--red)">${msg}</span>`; }
+
+async function loadFromSheets(){
+  if(SHEET_ID === 'YOUR_SHEET_ID_HERE'){
+    hideLoading();
+    return; // Use fallback TRIP data silently — sheet not configured yet
+  }
+  showLoading('Loading trip data…');
+  try {
+    // Fetch all 5 tabs in parallel
+    const [infoRows, pRows, dRows, eRows, whoRows] = await Promise.all([
+      fetchTab(TABS.info),
+      fetchTab(TABS.participants),
+      fetchTab(TABS.days),
+      fetchTab(TABS.events),
+      fetchTab(TABS.who),
+    ]);
+
+    // ── Info tab ──────────────────────────────────
+    // Columns: key | value_en | value_zh
+    infoRows.forEach(r => {
+      const k = (r.key||'').toLowerCase().replace(/\s/g,'_');
+      if(k==='name')     { TRIP.name=r.value_en||r.value||''; TRIP.name_zh=r.value_zh||''; }
+      if(k==='dates')    { TRIP.dates=r.value_en||r.value||''; TRIP.dates_zh=r.value_zh||''; }
+      if(k==='tagline')  { TRIP.tagline=r.value_en||r.value||''; TRIP.tagline_zh=r.value_zh||''; }
+      if(k==='password') { TRIP.password=r.value_en||r.value||''; }
+    });
+
+    // ── Participants tab ───────────────────────────
+    // Columns: id | emoji | name | role | role_zh | days (comma-separated day IDs)
+    TRIP.participants = pRows
+      .filter(r => r.id && r.name)
+      .map(r => ({
+        id:      r.id.trim(),
+        emoji:   r.emoji||'🌸',
+        name:    r.name.trim(),
+        role:    r.role||'',
+        role_zh: r.role_zh||r.role||'',
+        days:    (r.days||'').split(',').map(d=>d.trim()).filter(Boolean),
+      }));
+    pC = TRIP.participants.length;
+
+    // ── Days tab ───────────────────────────────────
+    // Columns: id | date | date_zh | theme | theme_zh | start | desc | desc_zh
+    TRIP.days = dRows
+      .filter(r => r.id)
+      .map(r => ({
+        id:       r.id.trim(),
+        date:     r.date||'',     date_zh:  r.date_zh||'',
+        theme:    r.theme||'',    theme_zh: r.theme_zh||'',
+        start:    r.start||'',
+        desc:     r.desc||'',     desc_zh:  r.desc_zh||'',
+        events:   [],
+      }));
+    dC = TRIP.days.length;
+
+    // ── Events tab ─────────────────────────────────
+    // Columns: id | day_id | time | type | title | title_zh | desc | desc_zh
+    eRows.filter(r => r.id && r.day_id).forEach(r => {
+      const day = TRIP.days.find(d => d.id === r.day_id.trim());
+      if(day){
+        day.events.push({
+          id:       r.id.trim(),
+          time:     r.time||'',
+          type:     r.type||'activity',
+          title:    r.title||'',     title_zh: r.title_zh||'',
+          desc:     r.desc||'',      desc_zh:  r.desc_zh||'',
+          who:      [], // filled by who tab
+        });
+        const n = parseInt(r.id.replace(/\D/g,''));
+        if(n > eC) eC = n;
+      }
+    });
+
+    // ── Who tab ────────────────────────────────────
+    // Columns: event_id | participant_ids (comma-separated)
+    whoRows.filter(r => r.event_id).forEach(r => {
+      const eid = r.event_id.trim();
+      const pids = (r.participant_ids||'').split(',').map(p=>p.trim()).filter(Boolean);
+      TRIP.days.forEach(d => {
+        const ev = d.events.find(e => e.id === eid);
+        if(ev) ev.who = pids;
+      });
+    });
+
+    // Update sheet link
+    $('sheet-link').href = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/edit`;
+
+    hideLoading();
+    renderAll();
+  } catch(err) {
+    console.error('Sheets error:', err);
+    showError(`Could not load sheet data.<br><small>${err.message}</small><br><br><button onclick="hideLoading()" style="margin-top:8px;padding:6px 18px;border:1px solid var(--border);border-radius:20px;background:none;cursor:pointer;font-family:inherit">Use demo data</button>`);
+  }
 }
 
 // ════════════════════════════════════════
@@ -680,24 +980,291 @@ function renderPRead(){
 }
 
 // ════════════════════════════════════════
-//  PARTICIPANTS EDIT
+//  ADMIN: PARTICIPANTS
 // ════════════════════════════════════════
 function renderPEdit(){
-  $('p-edit').innerHTML=`<div class="p-grid-edit">${TRIP.participants.map(p=>`
-    <div class="p-card-edit">
-      <button class="p-del" onclick="delP('${p.id}')">×</button>
-      <div class="p-card-head">
-        <div class="p-emoji-btn" onclick="cycleEmoji('${p.id}')">${p.emoji}</div>
-        <div style="flex:1">
-          <input class="p-name-inp" placeholder="Name" value="${p.name}" oninput="updP('${p.id}','name',this.value)">
-          <input class="p-role-inp" placeholder="Role" value="${p.role}" oninput="updP('${p.id}','role',this.value);updP('${p.id}','role_zh',this.value)">
+  const c = $('admin-participants');
+  c.innerHTML = '';
+
+  // Trip info panel
+  const infoDiv = document.createElement('div');
+  infoDiv.className = 'admin-section';
+  infoDiv.innerHTML = `
+    <div class="admin-section-title"><span>✈️</span> Trip info</div>
+    <div class="admin-section-sub">Shown in the hero banner at the top of the site.</div>
+    <div class="admin-field-group">
+      <div class="admin-field-row">
+        <div class="admin-field">
+          <label>Trip name (EN)</label>
+          <input class="admin-input" value="${esc(TRIP.name)}" placeholder="e.g. Xi'an Family Trip"
+            oninput="TRIP.name=this.value;renderHero()">
+        </div>
+        <div class="admin-field">
+          <label>Trip name <span class="zh-badge">中文</span></label>
+          <input class="admin-input" value="${esc(TRIP.name_zh)}" placeholder="例：西安家庭之旅"
+            oninput="TRIP.name_zh=this.value;renderHero()">
         </div>
       </div>
-      ${TRIP.days.length?`<div class="p-days-lbl">${t('p.daysLabel')}</div>
-      <div class="p-days-row">${TRIP.days.map((d,i)=>`<button class="day-tog ${p.days.includes(d.id)?'on':''}" onclick="togPDay('${p.id}','${d.id}',this)">${f(d,'date').split(' ')[0]||'Day '+(i+1)}</button>`).join('')}</div>`:''}
-    </div>`).join('')}
-  </div><button class="btn-add" onclick="addP()">${t('btn.addPerson')}</button>`;
+      <div class="admin-field-row">
+        <div class="admin-field">
+          <label>Dates (EN)</label>
+          <input class="admin-input" value="${esc(TRIP.dates)}" placeholder="e.g. April 1–7, 2025"
+            oninput="TRIP.dates=this.value;renderHero()">
+        </div>
+        <div class="admin-field">
+          <label>Dates <span class="zh-badge">中文</span></label>
+          <input class="admin-input" value="${esc(TRIP.dates_zh)}" placeholder="例：2025年4月1日–7日"
+            oninput="TRIP.dates_zh=this.value;renderHero()">
+        </div>
+      </div>
+      <div class="admin-field-row">
+        <div class="admin-field">
+          <label>Tagline (EN)</label>
+          <input class="admin-input" value="${esc(TRIP.tagline)}" placeholder="e.g. 7 friends · 7 days"
+            oninput="TRIP.tagline=this.value;renderHero()">
+        </div>
+        <div class="admin-field">
+          <label>Tagline <span class="zh-badge">中文</span></label>
+          <input class="admin-input" value="${esc(TRIP.tagline_zh)}" placeholder="例：7位家庭成员 · 7天"
+            oninput="TRIP.tagline_zh=this.value;renderHero()">
+        </div>
+      </div>
+      <div class="admin-field-row">
+        <div class="admin-field">
+          <label>Organizer password</label>
+          <input class="admin-input" type="text" value="${esc(TRIP.password)}" placeholder="password"
+            oninput="TRIP.password=this.value">
+        </div>
+      </div>
+    </div>`;
+  c.appendChild(infoDiv);
+
+  // Participants panel
+  const pDiv = document.createElement('div');
+  pDiv.className = 'admin-section';
+  pDiv.innerHTML = `
+    <div class="admin-section-title"><span>👥</span> Participants</div>
+    <div class="admin-section-sub">Names are never translated. Role labels have a Chinese version. Toggle which days each person attends.</div>`;
+
+  const grid = document.createElement('div');
+  grid.className = 'admin-p-grid';
+  TRIP.participants.forEach(p => {
+    const div = document.createElement('div');
+    div.className = 'admin-field-group';
+    div.innerHTML = `
+      <div class="admin-field-row" style="align-items:center;margin-bottom:12px">
+        <div style="font-size:28px;cursor:pointer;width:44px;height:44px;background:var(--blush);border:1px solid #f0c8d8;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0"
+          onclick="cycleEmoji('${p.id}');renderPEdit()">${p.emoji}</div>
+        <div class="admin-field" style="margin-bottom:0">
+          <label>Name <span style="color:var(--muted);font-size:9px;letter-spacing:0;text-transform:none">(not translated)</span></label>
+          <input class="admin-input" value="${esc(p.name)}" placeholder="Name"
+            oninput="updP('${p.id}','name',this.value)">
+        </div>
+        <button class="admin-del-btn" onclick="delP('${p.id}')">Remove</button>
+      </div>
+      <div class="admin-field-row">
+        <div class="admin-field">
+          <label>Role (EN)</label>
+          <input class="admin-input" value="${esc(p.role)}" placeholder="e.g. Organizer"
+            oninput="updP('${p.id}','role',this.value)">
+        </div>
+        <div class="admin-field">
+          <label>Role <span class="zh-badge">中文</span></label>
+          <input class="admin-input" value="${esc(p.role_zh||'')}" placeholder="例：组织者"
+            oninput="updP('${p.id}','role_zh',this.value)">
+        </div>
+      </div>
+      <div class="admin-day-checks">
+        <div style="width:100%;font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:6px">Days attending</div>
+        ${TRIP.days.map((d,i)=>`
+          <button class="admin-who-btn ${p.days.includes(d.id)?'on':''}"
+            onclick="togPDay('${p.id}','${d.id}',this)">
+            Day ${i+1}${d.date?' · '+d.date.split(' ').slice(0,2).join(' '):''}
+          </button>`).join('')}
+      </div>`;
+    grid.appendChild(div);
+  });
+  pDiv.appendChild(grid);
+
+  const addBtn = document.createElement('button');
+  addBtn.className = 'admin-add-block';
+  addBtn.innerHTML = '＋ Add participant';
+  addBtn.onclick = () => { addP(); };
+  pDiv.appendChild(addBtn);
+  c.appendChild(pDiv);
+
+  // Download bar
+  renderDownloadBar(c);
 }
+
+// ════════════════════════════════════════
+//  ADMIN: ITINERARY
+// ════════════════════════════════════════
+function renderItEdit(){
+  const c = $('admin-itinerary');
+  c.innerHTML = '';
+
+  const hdr = document.createElement('div');
+  hdr.className = 'admin-section';
+  hdr.innerHTML = `
+    <div class="admin-section-title"><span>🗓️</span> Days & Events</div>
+    <div class="admin-section-sub">Fill in English first, then add Chinese translations in the 中文 fields. Leave 中文 fields blank to fall back to English.</div>`;
+  c.appendChild(hdr);
+
+  TRIP.days.forEach((d, di) => {
+    const block = document.createElement('div');
+    block.className = 'admin-section';
+
+    const dayHeaderInfo = d.date || d.theme || `Day ${di+1}`;
+    block.innerHTML = `
+      <div class="admin-field-group">
+        <div class="admin-group-header">
+          <div class="admin-group-num">${String(di+1).padStart(2,'0')}</div>
+          <div class="admin-group-label">
+            <strong>Day ${di+1} — ${esc(d.theme||'(no theme yet)')}</strong>
+            <span>${esc(d.date||'')}</span>
+          </div>
+          <button class="admin-del-btn" onclick="delDay('${d.id}')">Remove day</button>
+        </div>
+
+        <div class="admin-field-row">
+          <div class="admin-field">
+            <label>Date (EN)</label>
+            <input class="admin-input" value="${esc(d.date)}" placeholder="e.g. Tuesday 1 April"
+              oninput="updDay('${d.id}','date',this.value)">
+          </div>
+          <div class="admin-field">
+            <label>Date <span class="zh-badge">中文</span></label>
+            <input class="admin-input" value="${esc(d.date_zh||'')}" placeholder="例：4月1日 周二"
+              oninput="updDay('${d.id}','date_zh',this.value)">
+          </div>
+          <div class="admin-field" style="max-width:120px;min-width:80px">
+            <label>Departure time</label>
+            <input class="admin-input" value="${esc(d.start)}" placeholder="08:00"
+              oninput="updDay('${d.id}','start',this.value)">
+          </div>
+        </div>
+
+        <div class="admin-field-row">
+          <div class="admin-field">
+            <label>Day theme (EN)</label>
+            <input class="admin-input" value="${esc(d.theme)}" placeholder="e.g. Beijing → Xi'an"
+              oninput="updDay('${d.id}','theme',this.value)">
+          </div>
+          <div class="admin-field">
+            <label>Day theme <span class="zh-badge">中文</span></label>
+            <input class="admin-input" value="${esc(d.theme_zh||'')}" placeholder="例：北京 → 西安"
+              oninput="updDay('${d.id}','theme_zh',this.value)">
+          </div>
+        </div>
+
+        <div class="admin-field-row">
+          <div class="admin-field">
+            <label>Day description (EN)</label>
+            <textarea class="admin-textarea" placeholder="A paragraph describing the day's mood, tips, or notes…"
+              oninput="updDay('${d.id}','desc',this.value)">${esc(d.desc||'')}</textarea>
+          </div>
+          <div class="admin-field">
+            <label>Day description <span class="zh-badge">中文</span></label>
+            <textarea class="admin-textarea" placeholder="中文简介（可选）…"
+              oninput="updDay('${d.id}','desc_zh',this.value)">${esc(d.desc_zh||'')}</textarea>
+          </div>
+        </div>
+
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--border)">
+          <div style="font-size:10px;letter-spacing:2px;text-transform:uppercase;color:var(--muted);margin-bottom:10px">Events on this day</div>
+          <div id="ev-list-${d.id}"></div>
+          <button class="admin-add-ev" onclick="addEv('${d.id}')">＋ Add event</button>
+        </div>
+      </div>`;
+
+    c.appendChild(block);
+    renderEvList(d);
+  });
+
+  const addDayBtn = document.createElement('button');
+  addDayBtn.className = 'admin-add-block';
+  addDayBtn.innerHTML = '＋ Add day';
+  addDayBtn.onclick = () => { addDay(); };
+  c.appendChild(addDayBtn);
+
+  renderDownloadBar(c);
+}
+
+function renderEvList(d){
+  const container = document.getElementById('ev-list-' + d.id);
+  if(!container) return;
+  container.innerHTML = '';
+  d.events.forEach(e => {
+    const ev = document.createElement('div');
+    ev.className = 'admin-event';
+    ev.setAttribute('data-type', e.type);
+    const whoBtns = TRIP.participants.map(p =>
+      `<button class="admin-who-btn ${e.who.includes(p.id)?'on':''}"
+        onclick="togEWho('${d.id}','${e.id}','${p.id}',this)">${p.emoji} ${p.name}</button>`
+    ).join('');
+    ev.innerHTML = `
+      <div class="admin-event-top">
+        <input class="admin-input" style="width:72px;flex-shrink:0" placeholder="00:00" maxlength="5"
+          value="${esc(e.time)}" oninput="updEv('${d.id}','${e.id}','time',this.value)">
+        <select class="admin-select" style="width:130px;flex-shrink:0"
+          onchange="updEv('${d.id}','${e.id}','type',this.value);this.closest('.admin-event').setAttribute('data-type',this.value)">
+          <option value="drive"    ${e.type==='drive'   ?'selected':''}>🚗 Drive</option>
+          <option value="stay"     ${e.type==='stay'    ?'selected':''}>🏕 Stay</option>
+          <option value="activity" ${e.type==='activity'?'selected':''}>⚡ Activity</option>
+          <option value="food"     ${e.type==='food'    ?'selected':''}>🌸 Food</option>
+          <option value="free"     ${e.type==='free'    ?'selected':''}>☁ Free</option>
+        </select>
+        <button class="admin-del-btn" style="margin-left:auto" onclick="delEv('${d.id}','${e.id}')">Remove</button>
+      </div>
+      <div class="admin-field-row">
+        <div class="admin-field">
+          <label>Title (EN)</label>
+          <input class="admin-input" value="${esc(e.title)}" placeholder="Event title…"
+            oninput="updEv('${d.id}','${e.id}','title',this.value)">
+        </div>
+        <div class="admin-field">
+          <label>Title <span class="zh-badge">中文</span></label>
+          <input class="admin-input" value="${esc(e.title_zh||'')}" placeholder="活动名称…"
+            oninput="updEv('${d.id}','${e.id}','title_zh',this.value)">
+        </div>
+      </div>
+      <div class="admin-field-row">
+        <div class="admin-field">
+          <label>Description (EN)</label>
+          <textarea class="admin-textarea" style="min-height:48px" placeholder="Short notes, tips, booking info…"
+            oninput="updEv('${d.id}','${e.id}','desc',this.value)">${esc(e.desc||'')}</textarea>
+        </div>
+        <div class="admin-field">
+          <label>Description <span class="zh-badge">中文</span></label>
+          <textarea class="admin-textarea" style="min-height:48px" placeholder="中文备注（可选）…"
+            oninput="updEv('${d.id}','${e.id}','desc_zh',this.value)">${esc(e.desc_zh||'')}</textarea>
+        </div>
+      </div>
+      ${TRIP.participants.length ? `
+        <div class="admin-who-label">Who attends — leave all off = everyone</div>
+        <div class="admin-who-grid">${whoBtns}</div>` : ''}`;
+    container.appendChild(ev);
+  });
+}
+
+function renderDownloadBar(container){
+  const bar = document.createElement('div');
+  bar.className = 'download-bar';
+  bar.innerHTML = `
+    <div style="text-align:center">
+      <button class="btn-download" onclick="downloadDataJs()">
+        <span class="dl-icon">⬇</span> Download data.js
+      </button>
+      <div class="btn-download-hint">Replace the data.js file in your GitHub repo with this download</div>
+    </div>`;
+  container.appendChild(bar);
+}
+
+// ════════════════════════════════════════
+//  ESCAPE HELPER (prevent HTML injection in inputs)
+// ════════════════════════════════════════
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
 function addP(){ pC++; TRIP.participants.push({id:'p'+pC,name:'',role:'',role_zh:'',emoji:EMOJIS[pC%EMOJIS.length],days:[]}); renderPEdit(); renderPRead(); }
 function delP(id){ TRIP.participants=TRIP.participants.filter(p=>p.id!==id); renderPEdit(); renderPRead(); renderItEdit(); }
 function updP(id,k,v){ const p=TRIP.participants.find(x=>x.id===id); if(p){p[k]=v; renderPRead(); renderSchedBtns();} }
@@ -788,9 +1355,9 @@ function evCard(did,e){
 
 function addDay(){ dC++; TRIP.days.push({id:'d'+dC,date:'',date_zh:'',theme:'',theme_zh:'',start:'',desc:'',desc_zh:'',events:[]}); renderItEdit(); renderItRead(); renderPEdit(); renderPRead(); }
 function delDay(did){ TRIP.days=TRIP.days.filter(d=>d.id!==did); renderItEdit(); renderItRead(); renderPEdit(); renderPRead(); }
-function updDay(did,k,v){ const d=TRIP.days.find(x=>x.id===did); if(d){d[k]=v; renderItRead(); renderPEdit(); renderPRead();} }
-function addEv(did){ eC++; const d=TRIP.days.find(x=>x.id===did); if(d){d.events.push({id:'e'+eC,time:'',title:'',title_zh:'',type:'activity',desc:'',desc_zh:'',who:[]}); renderItEdit(); renderItRead(); } }
-function delEv(did,eid){ const d=TRIP.days.find(x=>x.id===did); if(d){d.events=d.events.filter(e=>e.id!==eid); renderItEdit(); renderItRead(); } }
+function updDay(did,k,v){ const d=TRIP.days.find(x=>x.id===did); if(d){d[k]=v; renderItRead();} }
+function addEv(did){ eC++; const d=TRIP.days.find(x=>x.id===did); if(d){d.events.push({id:'e'+eC,time:'',title:'',title_zh:'',type:'activity',desc:'',desc_zh:'',who:[]}); renderEvList(d); renderItRead(); } }
+function delEv(did,eid){ const d=TRIP.days.find(x=>x.id===did); if(d){d.events=d.events.filter(e=>e.id!==eid); renderEvList(d); renderItRead(); } }
 function updEv(did,eid,k,v){ const d=TRIP.days.find(x=>x.id===did); if(!d)return; const e=d.events.find(x=>x.id===eid); if(e){e[k]=v; renderItRead();} }
 function togEWho(did,eid,pid,btn){ const d=TRIP.days.find(x=>x.id===did); if(!d)return; const e=d.events.find(x=>x.id===eid); if(!e)return; if(e.who.includes(pid)){e.who=e.who.filter(w=>w!==pid);btn.classList.remove('on');}else{e.who.push(pid);btn.classList.add('on');} }
 function AR(ta){ ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px'; }
@@ -864,7 +1431,7 @@ function showTab(id,btn){
 // ════════════════════════════════════════
 function renderAll(){ renderHero(); renderPRead(); renderItRead(); renderSchedBtns(); }
 applyI18n();
-renderAll();
+loadFromSheets();
 </script>
 </body>
 </html>
